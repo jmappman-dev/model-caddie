@@ -13,7 +13,7 @@ import { validateConfig, compileConfig, loadProfile, resolveConfig, listProfiles
 import { makeLogEntry } from '../src/log.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const CLI = join(ROOT, 'bin', 'model-router.js');
+const CLI = join(ROOT, 'bin', 'model-caddie.js');
 const FULL_ENV = { PERPLEXITY_API_KEY: 'test-placeholder', GEMINI_API_KEY: 'test-placeholder', ANTHROPIC_API_KEY: 'test-placeholder' };
 const anthropic = () => loadProfile('anthropic');
 
@@ -184,11 +184,11 @@ test('signal term lists are configurable and validated', () => {
 test('config resolution prefers an explicit path, then the env var, then a local file, then a profile', () => {
   const dir = mkdtempSync(join(tmpdir(), 'mr-'));
   const local = anthropic(); local.name = 'local-file';
-  writeFileSync(join(dir, 'model-router.config.json'), JSON.stringify(local));
+  writeFileSync(join(dir, 'model-caddie.config.json'), JSON.stringify(local));
   assert.equal(resolveConfig({ cwd: dir, env: {} }).raw.name, 'local-file');
   const viaEnv = anthropic(); viaEnv.name = 'via-env';
   writeFileSync(join(dir, 'other.json'), JSON.stringify(viaEnv));
-  assert.equal(resolveConfig({ cwd: dir, env: { MODEL_ROUTER_CONFIG: 'other.json' } }).raw.name, 'via-env');
+  assert.equal(resolveConfig({ cwd: dir, env: { MODEL_CADDIE_CONFIG: 'other.json' } }).raw.name, 'via-env');
   assert.equal(resolveConfig({ cwd: dir, env: {}, configPath: 'other.json' }).raw.name, 'via-env');
   const empty = mkdtempSync(join(tmpdir(), 'mr-'));
   assert.equal(resolveConfig({ cwd: empty, env: {}, profile: 'ollama' }).raw.name, 'ollama');
@@ -238,14 +238,14 @@ test('the CLI --json output parses and --log writes to the configured path', () 
   assert.equal(r.status, 0, r.stderr);
   const out = JSON.parse(r.stdout);
   assert.equal(out.decision.tier, 'light');
-  const logFile = join(dir, '.model-router', 'decisions.jsonl');
+  const logFile = join(dir, '.model-caddie', 'decisions.jsonl');
   assert.ok(existsSync(logFile));
   assert.equal(JSON.parse(readFileSync(logFile, 'utf8').trim()).rule, 'R5-primary-ladder');
 });
 
 test('the CLI exits 2 with a readable message on a bad config, and 1 with no task', () => {
   const dir = mkdtempSync(join(tmpdir(), 'mr-'));
-  writeFileSync(join(dir, 'model-router.config.json'), '{"lanes": {}}');
+  writeFileSync(join(dir, 'model-caddie.config.json'), '{"lanes": {}}');
   const bad = cli(['anything'], { cwd: dir });
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /invalid router config/);

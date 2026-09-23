@@ -38,7 +38,7 @@ These are real inputs, run through the actual CLI, not paraphrased.
 **Example 1: a trivial edit.**
 
 ```
-$ node bin/model-router.js "rename the heading in the team wiki note"
+$ node bin/model-caddie.js "rename the heading in the team wiki note"
 config: profile:anthropic
 route: primary / light -> claude-haiku-4-5-20251001 (R5-primary-ladder, E-trivial)
 ```
@@ -48,7 +48,7 @@ Nothing here asks for a live fact, a review, or a large input, so R1 through R4 
 **Example 2: a live fact.**
 
 ```
-$ node bin/model-router.js "what is the current 10-year treasury yield"
+$ node bin/model-caddie.js "what is the current 10-year treasury yield"
 config: profile:anthropic
 route: research / quick -> sonar (R3-live-web, quick-fact)
 ```
@@ -58,7 +58,7 @@ The phrase "current ... yield" matches the live-fact pattern, so R3 fires before
 **Example 3: a code review.**
 
 ```
-$ node bin/model-router.js "code review the scheduler changes"
+$ node bin/model-caddie.js "code review the scheduler changes"
 config: profile:anthropic
 route: primary / strong -> claude-opus-5-5 (R3b-review-primary, E2-architecture-review)
 review pass: openai-codex / codex-cli-default; tie-break: google / gemini-3.1-pro-preview

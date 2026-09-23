@@ -1,13 +1,38 @@
 {
-  "name": "model-router",
+  "name": "model-caddie",
   "version": "0.1.0",
-  "description": "Deterministic, auditable task-to-model router for AI coding agents. No model call to pick a model, provider-agnostic config, and a built-in independent review pass.",
+  "description": "The right model for every task: deterministic, auditable model routing for AI coding agents, with a built-in independent review pass. No model call to pick a model.",
   "type": "module",
-  "bin": { "model-router": "bin/model-router.js" },
-  "exports": { ".": "./src/router.js", "./config": "./src/config.js", "./log": "./src/log.js" },
-  "files": ["bin", "src", "profiles", "skill", "README.md", "LICENSE"],
-  "scripts": { "test": "node --test \"test/**/*.test.js\"" },
-  "engines": { "node": ">=20" },
+  "bin": {
+    "model-caddie": "bin/model-caddie.js"
+  },
+  "exports": {
+    ".": "./src/router.js",
+    "./config": "./src/config.js",
+    "./log": "./src/log.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "profiles",
+    "skill",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "license": "MIT",
-  "keywords": ["llm", "router", "model-routing", "claude-code", "ai-agents", "code-review"]
+  "keywords": [
+    "llm",
+    "router",
+    "model-routing",
+    "claude-code",
+    "ai-agents",
+    "code-review",
+    "model-caddie"
+  ]
 }

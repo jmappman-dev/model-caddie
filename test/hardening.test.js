@@ -13,7 +13,7 @@ import { validateConfig, loadProfile, resolveConfig } from '../src/config.js';
 import { makeLogEntry, appendLog } from '../src/log.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const CLI = join(ROOT, 'bin', 'model-router.js');
+const CLI = join(ROOT, 'bin', 'model-caddie.js');
 const FULL_ENV = { PERPLEXITY_API_KEY: 'test-placeholder', GEMINI_API_KEY: 'test-placeholder', ANTHROPIC_API_KEY: 'test-placeholder' };
 const r = (t, config) => route(t, { env: FULL_ENV, config });
 const anthropic = () => loadProfile('anthropic');
@@ -227,9 +227,9 @@ test('S7 --check-config labels a lane with no env check as assumed available', (
 
 test('S7 --json output does not expose the absolute config path', () => {
   const dir = tmp();
-  writeFileSync(join(dir, 'model-router.config.json'), JSON.stringify(anthropic()));
+  writeFileSync(join(dir, 'model-caddie.config.json'), JSON.stringify(anthropic()));
   const out = JSON.parse(cli(['--json', 'rename a heading'], dir).stdout);
-  assert.equal(out.source, 'model-router.config.json');
+  assert.equal(out.source, 'model-caddie.config.json');
 });
 
 // --- second independent pass: bypasses of the first round of fixes -----------------

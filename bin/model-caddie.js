@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// CLI: model-router "<task text>" [--log] [--json] [--config <path>] [--profile <name>]
-//      model-router --check-config [--config <path>] [--profile <name>]
+// CLI: model-caddie "<task text>" [--log] [--json] [--config <path>] [--profile <name>]
+//      model-caddie --check-config [--config <path>] [--profile <name>]
 // Use "--" before a task that itself starts with dashes.
 
 import { route, prepare } from '../src/router.js';
 import { resolveConfig, compileConfig, listProfiles, ConfigError, LANES } from '../src/config.js';
 import { makeLogEntry, appendLog } from '../src/log.js';
 
-const USAGE = `usage: model-router "<task text>" [--log] [--json] [--config <path>] [--profile <name>]
-       model-router --check-config [--config <path>] [--profile <name>]
-       model-router [options] -- "<task text starting with dashes>"
+const USAGE = `usage: model-caddie "<task text>" [--log] [--json] [--config <path>] [--profile <name>]
+       model-caddie --check-config [--config <path>] [--profile <name>]
+       model-caddie [options] -- "<task text starting with dashes>"
 profiles: ${listProfiles().join(', ')}`;
 
 function parseArgs(argv) {
@@ -87,11 +87,11 @@ try {
   process.exitCode = main();
 } catch (e) {
   if (e instanceof ConfigError) {
-    console.error(`model-router: ${e.message}`);
+    console.error(`model-caddie: ${e.message}`);
     process.exitCode = 2;
   } else {
     // Unexpected failure: print the message only, never the environment.
-    console.error(`model-router: ${e && e.message ? e.message : String(e)}`);
+    console.error(`model-caddie: ${e && e.message ? e.message : String(e)}`);
     process.exitCode = 3;
   }
 }

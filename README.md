@@ -1,4 +1,8 @@
-# model-router
+# model-caddie
+
+**The right club for every shot, and an honest second read before you putt.**
+
+A good caddie hands you the club the shot calls for, not the most expensive one in the bag, and tells you when to get a second read on the green. model-caddie does the same for AI work: it picks the cheapest model that can handle each task, sends it to the right kind of model, and requires a different model to check any code, security, or spec review.
 
 A deterministic router that reads a plain-language task description and picks which model and lane should handle it (a light model for a typo fix, a research lane for a live fact, a large-context lane for a whole repo). It never calls a model to make that decision. Routing is a set of rules run over text, so it is free, instant, and the same input always produces the same output.
 
@@ -22,11 +26,11 @@ Most "smart routing" schemes call a model to decide which model to call, which a
 ## Quick start
 
 ```
-git clone https://github.com/jmappman-dev/model-router.git
-cd model-router
+git clone https://github.com/jmappman-dev/model-caddie.git
+cd model-caddie
 npm test
-node bin/model-router.js "code review the scheduler changes"
-node bin/model-router.js --check-config
+node bin/model-caddie.js "code review the scheduler changes"
+node bin/model-caddie.js --check-config
 ```
 
 ## Example output
@@ -34,7 +38,7 @@ node bin/model-router.js --check-config
 Running the CLI against the bundled default profile, with no config file and with `PERPLEXITY_API_KEY` and `GEMINI_API_KEY` set:
 
 ```
-$ node bin/model-router.js "code review the scheduler changes"
+$ node bin/model-caddie.js "code review the scheduler changes"
 config: profile:anthropic
 route: primary / strong -> claude-opus-5-5 (R3b-review-primary, E2-architecture-review)
 dispatch: anthropic claude-opus-5-5, in Claude Code use the Agent tool with the matching model override
@@ -44,7 +48,7 @@ notes:
 ```
 
 ```
-$ node bin/model-router.js "what is the current 10-year treasury yield"
+$ node bin/model-caddie.js "what is the current 10-year treasury yield"
 config: profile:anthropic
 route: research / quick -> sonar (R3-live-web, quick-fact)
 dispatch: perplexity: sonar
@@ -53,7 +57,7 @@ dispatch: perplexity: sonar
 With no `PERPLEXITY_API_KEY` set, the second task stays on the primary lane instead, and says so:
 
 ```
-$ node bin/model-router.js "what is the current 10-year treasury yield"
+$ node bin/model-caddie.js "what is the current 10-year treasury yield"
 config: profile:anthropic
 route: primary / standard -> claude-sonnet-5 (R3-live-unavailable, E0-default)
 dispatch: anthropic claude-sonnet-5, in Claude Code use the Agent tool with the matching model override
@@ -75,22 +79,22 @@ Five profiles ship in `profiles/`. Each names which environment variable (never 
 | `ollama` | A local Ollama model | none; everything runs locally, no keys and no data leaves the machine |
 | `claude-code-only` | Claude | none; single-provider setup, review pass asks for a manual second pass since no other lane exists |
 
-Select a profile with `--profile <name>`, or point at your own config with `--config <path>` or the `MODEL_ROUTER_CONFIG` environment variable. See `docs/CONFIGURATION.md` for the full reference.
+Select a profile with `--profile <name>`, or point at your own config with `--config <path>` or the `MODEL_CADDIE_CONFIG` environment variable. See `docs/CONFIGURATION.md` for the full reference.
 
 ## Configs from other people
 
-A `model-router.config.json` file sitting in the current working directory is picked up automatically, with no flag needed, ahead of the bundled default profile. That config decides where the decision log is written and which words count as overrides ("use opus", "ask gemini"). Read a config before you run it, the same as you would a script you did not write. The CLI always tells you which config it used: the first line of every non-JSON run starts with `config: <source>`, and `--json` output carries the same value in its `source` field, reported relative to the current directory.
+A `model-caddie.config.json` file sitting in the current working directory is picked up automatically, with no flag needed, ahead of the bundled default profile. That config decides where the decision log is written and which words count as overrides ("use opus", "ask gemini"). Read a config before you run it, the same as you would a script you did not write. The CLI always tells you which config it used: the first line of every non-JSON run starts with `config: <source>`, and `--json` output carries the same value in its `source` field, reported relative to the current directory.
 
 ## Use it with Claude Code
 
-A ready-made skill lives in `skill/SKILL.md`. Copy that folder into `~/.claude/skills/model-router` and edit the path inside it to point at wherever you cloned this repository. Claude Code will then route through the CLI whenever a task matches the skill's trigger.
+A ready-made skill lives in `skill/SKILL.md`. Copy that folder into `~/.claude/skills/model-caddie` and edit the path inside it to point at wherever you cloned this repository. Claude Code will then route through the CLI whenever a task matches the skill's trigger.
 
 ## Use it with any other agent
 
 This is a plain CLI and a zero-dependency ES module. Any agent framework that can run a shell command can call it directly:
 
 ```
-node /path/to/model-router/bin/model-router.js "summarize the entire repo" --json
+node /path/to/model-caddie/bin/model-caddie.js "summarize the entire repo" --json
 ```
 
 Or import the router straight into JavaScript and skip the CLI entirely:

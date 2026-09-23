@@ -63,7 +63,7 @@ Both `sensitiveTerms` and `contentTerms` must be arrays of plain words or short 
 
 ## Log
 
-`log` is an optional object, merged over `{ path: '.model-router/decisions.jsonl', taskText: 'omit' }`:
+`log` is an optional object, merged over `{ path: '.model-caddie/decisions.jsonl', taskText: 'omit' }`:
 
 - **`path`** (string): where `--log` appends decisions, resolved relative to the current working directory. It must be a relative path with no control characters, must stay inside the working directory (no `..` segment, and not absolute on POSIX or Windows), and must end in `.jsonl`. This is enforced so a config from someone else can never point the log at a file outside the project, such as a shell profile. `appendLog` (in `src/log.js`) enforces the same working-directory confinement again at write time, independent of config validation, and additionally refuses to append to a file that already exists but is not itself a JSONL log (its first line does not parse as JSON), so a mistaken or malicious path can never add lines to an existing script.
 - **`taskText`**: either `"omit"` (the default: the task text is left out of the log entirely, as `null`) or `"truncate"` (opt in: the logged task text is cut to 140 characters plus an ellipsis). Any other value is rejected. Either way, the task text is also dropped and replaced with `null` (with `taskRedacted: true` on the entry) whenever the router's own sensitive-data signal fires on that task, regardless of which `taskText` mode is configured; `"truncate"` only controls what happens on an ordinary, non-sensitive task.
@@ -73,8 +73,8 @@ Both `sensitiveTerms` and `contentTerms` must be arrays of plain words or short 
 `resolveConfig` (in `src/config.js`) picks a config source in this order, using the first one that applies:
 
 1. An explicit `--config <path>` flag.
-2. The `MODEL_ROUTER_CONFIG` environment variable, treated as a path.
-3. A `model-router.config.json` file in the current working directory, if one exists.
+2. The `MODEL_CADDIE_CONFIG` environment variable, treated as a path.
+3. A `model-caddie.config.json` file in the current working directory, if one exists.
 4. A bundled profile, chosen by `--profile <name>` or defaulting to `anthropic` if no flag is given.
 
 Whichever source wins, the raw JSON is then run through `validateConfig`, which fills in the defaults described above and rejects anything malformed with a `ConfigError` naming exactly what is wrong.
@@ -109,7 +109,7 @@ This alone validates and routes every task; every rule that would reach for rese
 - Add a `reviewer` lane, then set `review.reviewer` to point at it so review-shaped tasks pick up an independent pass.
 - Add aliases for any of these so a task can name them directly ("use gemini").
 
-Run `node bin/model-router.js --check-config --config ./my-profile.json` after each addition to confirm the lane validates and to see whether it currently resolves as available given your actual environment variables.
+Run `node bin/model-caddie.js --check-config --config ./my-profile.json` after each addition to confirm the lane validates and to see whether it currently resolves as available given your actual environment variables.
 
 ## How lanes become unavailable, and what routing does then
 

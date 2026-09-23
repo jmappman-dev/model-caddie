@@ -136,7 +136,7 @@ export function validateConfig(raw) {
   }
 
   // Task text stays out of the log unless a config opts in with "truncate".
-  cfg.log = { path: '.model-router/decisions.jsonl', taskText: 'omit', ...(cfg.log ?? {}) };
+  cfg.log = { path: '.model-caddie/decisions.jsonl', taskText: 'omit', ...(cfg.log ?? {}) };
   if (typeof cfg.log.path !== 'string' || !cfg.log.path) fail('log.path must be a string');
   checkLogPath(cfg.log.path);
   if (!['truncate', 'omit'].includes(cfg.log.taskText)) fail('log.taskText must be "truncate" or "omit"');
@@ -212,16 +212,16 @@ function readJson(path) {
   }
 }
 
-// Resolution order: --config flag, MODEL_ROUTER_CONFIG env var,
-// ./model-router.config.json in the working directory, --profile flag, then
+// Resolution order: --config flag, MODEL_CADDIE_CONFIG env var,
+// ./model-caddie.config.json in the working directory, --profile flag, then
 // the bundled default profile. Returns the raw object plus where it came from.
 export function resolveConfig({ configPath, profile, env = process.env, cwd = process.cwd() } = {}) {
   // source is reported relative to cwd so --json output does not expose the
   // user's home directory.
   const shown = (abs) => relative(cwd, abs) || abs;
   if (configPath) return { raw: readJson(resolve(cwd, configPath)), source: shown(resolve(cwd, configPath)) };
-  if (env.MODEL_ROUTER_CONFIG) return { raw: readJson(resolve(cwd, env.MODEL_ROUTER_CONFIG)), source: shown(resolve(cwd, env.MODEL_ROUTER_CONFIG)) };
-  const local = join(cwd, 'model-router.config.json');
+  if (env.MODEL_CADDIE_CONFIG) return { raw: readJson(resolve(cwd, env.MODEL_CADDIE_CONFIG)), source: shown(resolve(cwd, env.MODEL_CADDIE_CONFIG)) };
+  const local = join(cwd, 'model-caddie.config.json');
   if (existsSync(local)) return { raw: readJson(local), source: shown(local) };
   const name = profile || DEFAULT_PROFILE;
   return { raw: loadProfile(name), source: `profile:${name}` };

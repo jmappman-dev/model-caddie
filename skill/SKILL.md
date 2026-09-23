@@ -1,14 +1,14 @@
 ---
-name: model-router
+name: model-caddie
 description: >
   Picks the cheapest model that can handle a task, and the right kind of model
   for it (live web research, very large inputs, or an independent reviewer),
   using a deterministic rule set with no model call. Use when the user says
-  "/model-router", "route this", "which model should handle this", before
+  "/model-caddie", "route this", "which model should handle this", before
   handing work to a subagent, or before any code, security, or spec review.
 ---
 
-# model-router
+# model-caddie
 
 Deterministic task routing. The classifier reads the task text, picks a lane
 and tier, says which rule decided it, and flags when a review needs a second,
@@ -16,16 +16,16 @@ independent model. Logs every decision.
 
 ## Setup (once)
 
-1. Clone the repo somewhere stable, for example `~/tools/model-router`.
-2. Copy this `skill/` folder to `~/.claude/skills/model-router/`.
-3. Replace `<ROUTER_DIR>` below with the clone's absolute path.
+1. Clone the repo somewhere stable, for example `~/tools/model-caddie`.
+2. Copy this `skill/` folder to `~/.claude/skills/model-caddie/`.
+3. Replace `<CADDIE_DIR>` below with the clone's absolute path.
 4. Optional: set the API key env vars for the lanes you want (see the repo's
-   `.env.example`), then run `node <ROUTER_DIR>/bin/model-router.js --check-config`.
+   `.env.example`), then run `node <CADDIE_DIR>/bin/model-caddie.js --check-config`.
 
 ## Procedure
 
 1. Run the classifier and log the decision:
-   `node "<ROUTER_DIR>/bin/model-router.js" "<task text>" --log`
+   `node "<CADDIE_DIR>/bin/model-caddie.js" "<task text>" --log`
 2. State the route in one line (lane, tier, model, rule) so the user can
    redirect, then dispatch.
 3. Dispatch by lane:
