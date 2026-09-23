@@ -20,7 +20,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --test test/routing.test.js test/config.test.js test/hardening.test.js"
   },
   "engines": {
     "node": ">=20"
