@@ -17,7 +17,7 @@ The router checks rules in this exact order and stops at the first match. Think 
 - **R4, large input.** Does the task mention a whole repository, a long document, or a large file? If so, it goes to a lane built for bigger inputs.
 - **R5, everything else.** If nothing above matched, the task stays on the primary lane, at the cheapest tier that the wording justifies.
 
-The review pass itself is decided separately, after one of the rules above has already picked a lane and tier. Any task that reads as a code, security, or spec review picks up a mandatory `reviewPass`, whichever rule assigned the work: naming a lane yourself ("use gemini to review this diff", R1) or asking for a second opinion (R2, consensus) still gets the independent pass on top of whatever that rule decided, not instead of it. R3b above is only what happens when a review task did not match any earlier rule. See `docs/REVIEW-PASS.md` for the full mechanics of when the pass attaches and how the reviewer is chosen.
+The review pass itself is decided separately, after one of the rules above has already picked a lane and tier. It has THREE triggers: the task names a high-risk PATH (forced, and the scoring cannot override it), the task CHANGES code even without using the word "review", or the task ASKS for a review. It also carries a `scope` of `security` or `correctness`. Any of those picks up a mandatory `reviewPass`, whichever rule assigned the work: naming a lane yourself ("use gemini to review this diff", R1) or asking for a second opinion (R2, consensus) still gets the independent pass on top of whatever that rule decided, not instead of it. R3b above is only what happens when a review task did not match any earlier rule. See `docs/REVIEW-PASS.md` for the full mechanics of when the pass attaches and how the reviewer is chosen, and `docs/KNOWN-LIMITATIONS.md` for what it measurably scores and where it fails. On a clean blind set it misses more reviews than it over-requests, so treat it as a useful prompt rather than a guarantee.
 
 ## How the primary lane picks a tier
 
@@ -61,7 +61,7 @@ The phrase "current ... yield" matches the live-fact pattern, so R3 fires before
 $ node bin/model-caddie.js "code review the scheduler changes"
 config: profile:anthropic
 route: primary / strong -> claude-opus-5-5 (R3b-review-primary, E2-architecture-review)
-review pass: openai-codex / codex-cli-default; tie-break: google / gemini-3.1-pro-preview
+review pass (correctness): openai-codex / codex-cli-default; tie-break: google / gemini-3.1-pro-preview
 ```
 
 The phrase "code review" matches the review pattern, and the word "code" itself is a strong enough signal that the task is genuinely about software (not, say, a real estate listing that happens to use the word "review"). That combination fires R3b: the primary lane still does the actual review work, at the strong tier because a review is architecture-review-shaped, but the decision also attaches a mandatory independent review pass from a different model, with a third model standing by to arbitrate any disagreement between the two.
