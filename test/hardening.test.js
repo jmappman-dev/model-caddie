@@ -307,9 +307,14 @@ test('N1 a consensus code review never picks a reviewer that is already a consen
 });
 
 test('N2 model identity is compared as a pair, not a joined string', () => {
+  // Providers chosen so a NAIVE provider+model concatenation collides on "abc"
+  // while the pair stays distinct. They previously read 'a' and 'a/b', which
+  // 0.2.0's vendor-root rule now correctly treats as ONE vendor, so the
+  // tie-breaker was suppressed for a different and legitimate reason and this
+  // regression went untested. Distinct vendor roots keep the original intent.
   const cfg = anthropic();
-  cfg.lanes.reviewer = { provider: 'a', requiresEnv: [], models: { review: 'b/c' } };
-  cfg.lanes['large-context'] = { provider: 'a/b', requiresEnv: [], models: { fast: 'c', reasoning: 'c' } };
+  cfg.lanes.reviewer = { provider: 'ab', requiresEnv: [], models: { review: 'c' } };
+  cfg.lanes['large-context'] = { provider: 'a', requiresEnv: [], models: { fast: 'bc', reasoning: 'bc' } };
   const d = r('code review the handler', prepare(cfg));
   assert.equal(d.reviewPass.reviewer.lane, 'reviewer');
   assert.equal(d.reviewPass.tieBreaker.lane, 'large-context', 'a distinct model was suppressed by a string collision');

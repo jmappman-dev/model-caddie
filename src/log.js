@@ -28,6 +28,7 @@ export function makeLogEntry(taskText, d, { taskText: mode = 'truncate' } = {}) 
     declined: d.declined || [],
     reviewPass: d.reviewPass
       ? {
+        scope: d.reviewPass.scope || null,
         reviewer: d.reviewPass.reviewer ? d.reviewPass.reviewer.lane : null,
         tieBreaker: d.reviewPass.tieBreaker ? d.reviewPass.tieBreaker.lane : null,
         skipped: d.reviewPass.skipped.map((x) => x.lane),

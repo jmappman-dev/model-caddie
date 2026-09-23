@@ -72,7 +72,7 @@ function main() {
     console.log(`dispatch: ${d.dispatch}`);
     if (d.reviewPass) {
       const r = d.reviewPass;
-      console.log(`review pass: ${r.reviewer ? `${r.reviewer.provider} / ${r.reviewer.model}` : 'NO SECOND MODEL AVAILABLE, review by hand'}${r.tieBreaker ? `; tie-break: ${r.tieBreaker.provider} / ${r.tieBreaker.model}` : ''}`);
+      console.log(`review pass (${r.scope}): ${r.reviewer ? `${r.reviewer.provider} / ${r.reviewer.model}` : 'NO SECOND MODEL AVAILABLE, review by hand'}${r.tieBreaker ? `; tie-break: ${r.tieBreaker.provider} / ${r.tieBreaker.model}` : ''}`);
     }
     if (d.notes.length) console.log(`notes:\n  - ${d.notes.join('\n  - ')}`);
   }

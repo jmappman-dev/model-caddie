@@ -3,7 +3,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { stripFilenames, route as routeWith, TIERS } from '../src/router.js';
+import { stripFilenames, route as routeWith, TIERS, _identity, _vendor } from '../src/router.js';
 import { makeLogEntry } from '../src/log.js';
 
 const FULL_ENV = { PERPLEXITY_API_KEY: 'test-placeholder', GEMINI_API_KEY: 'test-placeholder' };
@@ -755,4 +755,454 @@ test('R3 question branch ignores past-tense activity questions with "today"', ()
 test('R3 fires on adverb-separated and "what happened" live-fact forms', () => {
   assert.equal(route('Are exchange rates up today?').rule, 'R3-live-web');
   assert.equal(route('What happened in markets today?').rule, 'R3-live-web');
+});
+
+
+// ---------------------------------------------------------------------------
+// 0.2.0: the review pass used to fire only when a task ASKED for a review,
+// because the matcher keyed on the literal word "review". A task that CHANGES
+// code needs the outside pass just as much and never uses that word, so the
+// requirement silently depended on the operator remembering it.
+// ---------------------------------------------------------------------------
+
+test('a code-mutating task requires a review pass without the word review', () => {
+  const d = route('fix the crash in the retry helper, TDD then verify');
+  assert.ok(d.reviewPass, 'a code fix must require the outside pass');
+  assert.equal(d.reviewPass.required, true);
+});
+
+test('an ordinary code change is correctness-scoped', () => {
+  assert.equal(route('refactor the retry helper and add tests').reviewPass.scope, 'correctness');
+});
+
+test('a task touching credentials is security-scoped', () => {
+  const d = route('add a backfill that authenticates with the service-role key and patches rows');
+  assert.equal(d.reviewPass.scope, 'security');
+});
+
+test('auth, payment, PII and untrusted input each force security scope', () => {
+  for (const s of [
+    'implement the login authorization check',
+    'build the payment webhook that charges the card on file',
+    'write an export of customer PII to csv',
+    'parse the user-supplied URL before fetching it',
+  ]) {
+    assert.equal(route(s).reviewPass.scope, 'security', s);
+  }
+});
+
+test('an explicit security review is security-scoped', () => {
+  assert.equal(route('run a security review of the intake endpoint').reviewPass.scope, 'security');
+});
+
+test('read-only investigation requires no review pass', () => {
+  for (const s of [
+    'trace why the report shows the same figure twice',
+    'find out what changed last week',
+    'summarise the open items',
+  ]) assert.equal(route(s).reviewPass, null, s);
+});
+
+test('prose work requires no code review pass', () => {
+  for (const s of [
+    'draft a caption for the launch post',
+    'write the newsletter edition',
+    'fix the typo in the product description',
+  ]) assert.equal(route(s).reviewPass, null, s);
+});
+
+test('the log entry carries the review scope', () => {
+  const text = 'add a script that patches rows using the service-role key';
+  const e = makeLogEntry(text, route(text));
+  assert.equal(e.reviewPass.scope, 'security');
+});
+
+// ---------------------------------------------------------------------------
+// 0.2.0: two models from the SAME PROVIDER are not an independent review.
+// The identity guard compared [provider, model], so a second lane on the same
+// provider with a different model passed it and the run reported an
+// "independent review pass". Different weights from one vendor share training,
+// tooling and blind spots, which is the whole reason the pass exists.
+// ---------------------------------------------------------------------------
+
+test('a reviewer on the same provider as the worker is refused', () => {
+  const cfg = {
+    lanes: {
+      primary: { provider: 'acme', models: { light: 'a-1', standard: 'a-2', strong: 'a-3', frontier: 'a-4' } },
+      reviewer: { provider: 'acme', requiresEnv: [], models: { review: 'a-9' } },
+    },
+    review: { reviewer: 'reviewer' },
+  };
+  const d = routeWith('fix the crash in the parser, add tests', { env: FULL_ENV, config: cfg });
+  assert.ok(d.reviewPass, 'the requirement must not disappear');
+  assert.equal(d.reviewPass.reviewer, null, 'same-provider lane must not be accepted as the reviewer');
+  assert.ok(
+    d.reviewPass.skipped.some((x) => /same provider/i.test(x.reason)),
+    'the skip reason must name the provider clash: ' + JSON.stringify(d.reviewPass.skipped),
+  );
+});
+
+test('a same-provider clash still demands a manual second pass', () => {
+  const cfg = {
+    lanes: {
+      primary: { provider: 'acme', models: { light: 'a-1', standard: 'a-2', strong: 'a-3', frontier: 'a-4' } },
+      reviewer: { provider: 'acme', requiresEnv: [], models: { review: 'a-9' } },
+    },
+    review: { reviewer: 'reviewer' },
+  };
+  const d = routeWith('fix the crash in the parser, add tests', { env: FULL_ENV, config: cfg });
+  assert.equal(d.reviewPass.required, true);
+  assert.ok(d.notes.some((n) => /no second model is available|by hand/i.test(n)), JSON.stringify(d.notes));
+});
+
+test('a reviewer on a different provider is still accepted', () => {
+  const d = route('fix the crash in the parser, add tests');
+  assert.ok(d.reviewPass.reviewer, 'the bundled profile has a different-provider reviewer');
+  assert.notEqual(d.reviewPass.reviewer.provider, d.provider);
+});
+
+
+// ---------------------------------------------------------------------------
+// Findings from the independent Codex review of the 0.2.0 change itself.
+// ---------------------------------------------------------------------------
+
+// P2-1: the trivial-edit guard matched anywhere in the text, so one incidental
+// word cancelled the review requirement for a substantive fix. Worst case a
+// security fix silently lost its pass because it also renamed something.
+test('a trivial keyword does not cancel review of a substantive fix', () => {
+  assert.ok(route('fix the authentication bypass and rename the helper').reviewPass,
+    'a security fix must keep its pass even when it also renames something');
+});
+
+test('a negated trivial instruction does not cancel the pass', () => {
+  assert.ok(route('fix the crash in the parser; do not reformat anything').reviewPass);
+});
+
+test('a genuinely trivial edit still requires nothing', () => {
+  assert.equal(route('fix the typo in the readme').reviewPass, null);
+  assert.equal(route('rename the heading in the team wiki note').reviewPass, null);
+  assert.equal(route('reformat the config file').reviewPass, null);
+});
+
+// P2-2: security vocabulary alone, and the bare word "test", were treated as
+// evidence of CODE work, so ordinary business bookkeeping demanded a code review.
+test('business bookkeeping is not code work', () => {
+  for (const s of [
+    'create an invoice for the customer',
+    'add a payment to the ledger',
+    'write a refund request',
+    'export the billing records',
+  ]) assert.equal(route(s).reviewPass, null, 'spurious pass for: ' + s);
+});
+
+test('the bare word test in a non-code task is not code work', () => {
+  assert.equal(route('build a science test for students').reviewPass, null);
+});
+
+test('but real code work touching money still requires a security pass', () => {
+  const d = route('implement the payment webhook handler that charges the card on file');
+  assert.ok(d.reviewPass, 'a webhook handler is code');
+  assert.equal(d.reviewPass.scope, 'security');
+});
+
+test('a credential-handling script is still caught as security code work', () => {
+  const d = route('add a backfill script that authenticates with the service-role key and patches rows');
+  assert.ok(d.reviewPass);
+  assert.equal(d.reviewPass.scope, 'security');
+});
+
+// P2-3: the sanitize/sanitise alternatives ended at a word boundary after the
+// bare stem, so the actual words never matched and scope came back correctness.
+test('sanitization wording selects security scope', () => {
+  for (const s of [
+    'sanitize input in the parser',
+    'implement input sanitization in the parser',
+    'sanitise the user input in the handler',
+  ]) assert.equal(route(s).reviewPass.scope, 'security', s);
+});
+
+// P2-4: provider equality compared raw labels, so "openai" and "openai-codex"
+// read as different vendors and a same-vendor reviewer was accepted.
+test('provider labels sharing a vendor prefix count as the same vendor', () => {
+  const cfg = {
+    lanes: {
+      primary: { provider: 'openai', models: { light: 'o-1', standard: 'o-2', strong: 'o-3', frontier: 'o-4' } },
+      reviewer: { provider: 'openai-codex', requiresEnv: [], models: { review: 'o-9' } },
+    },
+    review: { reviewer: 'reviewer' },
+  };
+  const d = routeWith('fix the crash in the parser, add tests', { env: FULL_ENV, config: cfg });
+  assert.ok(d.reviewPass, 'the requirement must not disappear');
+  assert.equal(d.reviewPass.reviewer, null, 'openai-codex must not review openai work');
+  assert.ok(d.reviewPass.skipped.some((x) => /same provider/i.test(x.reason)), JSON.stringify(d.reviewPass.skipped));
+});
+
+test('genuinely different vendors are still accepted', () => {
+  const cfg = {
+    lanes: {
+      primary: { provider: 'acme', models: { light: 'a-1', standard: 'a-2', strong: 'a-3', frontier: 'a-4' } },
+      reviewer: { provider: 'globex', requiresEnv: [], models: { review: 'g-9' } },
+    },
+    review: { reviewer: 'reviewer' },
+  };
+  const d = routeWith('fix the crash in the parser, add tests', { env: FULL_ENV, config: cfg });
+  assert.ok(d.reviewPass.reviewer, 'a different vendor must still be accepted');
+  assert.equal(d.reviewPass.reviewer.provider, 'globex');
+});
+
+
+// ---------------------------------------------------------------------------
+// Second independent Codex pass, after the first round of fixes. It found the
+// first two findings only PARTIALLY closed, and one of my own fixes had opened
+// a worse hole than it shut.
+// ---------------------------------------------------------------------------
+
+// RR-1: the trivial guard consulted security wording and code-work terms but
+// NOT an explicit code signal, so a plain code change plus one trivial word
+// still required nothing.
+test('an explicit code signal makes a change substantive despite a trivial word', () => {
+  assert.ok(route('fix the parser').reviewPass, 'baseline: a parser fix is code work');
+  assert.ok(route('fix the parser and rename the helper').reviewPass,
+    'a code signal must outweigh an incidental "rename"');
+  assert.ok(route('implement pagination in the API; do not reformat anything').reviewPass,
+    'a negated "reformat" must not cancel the pass');
+});
+
+// RR-2: tightening the keyword list to kill false positives created a WORSE
+// false negative. Filename stripping removes the path and extension, so once
+// bare "bug", "test", "helper" and "timeout" were gone, an ordinary bug fix in a
+// named source file required no review at all. The fix detects the source file
+// on the RAW text, before stripping, rather than restoring broad keywords.
+test('naming a source file is itself evidence of code work', () => {
+  for (const s of [
+    'fix the bug in src/retry.js',
+    'write a test for src/retry.js',
+    'implement the retry helper in src/retry.js',
+    'fix the timeout in src/retry.js',
+  ]) assert.ok(route(s).reviewPass, 'no pass for: ' + s);
+});
+
+test('a named source file survives the content guard', () => {
+  // "billing" is business vocabulary, which alone is not code work, but a named
+  // source file says this is code and the money wording sets the scope.
+  const d = route('implement recurring billing in src/billing.js');
+  assert.ok(d.reviewPass, 'a named source file must carry it');
+  assert.equal(d.reviewPass.scope, 'security');
+});
+
+test('a source DIRECTORY path counts even with no extension', () => {
+  assert.ok(route('fix the retry logic in lib/backoff').reviewPass);
+});
+
+test('prose files are not source files', () => {
+  assert.equal(route('fix the wording in docs/overview.md').reviewPass, null);
+  assert.equal(route('update the numbers in reports/q3.csv').reviewPass, null);
+});
+
+// RR-3: underscores are valid provider-label characters and were not normalized,
+// so "openai" and "openai_codex" still read as different vendors.
+test('an underscore provider alias is the same vendor', () => {
+  const cfg = {
+    lanes: {
+      primary: { provider: 'openai', models: { light: 'o-1', standard: 'o-2', strong: 'o-3', frontier: 'o-4' } },
+      reviewer: { provider: 'openai_codex', requiresEnv: [], models: { review: 'o-9' } },
+    },
+    review: { reviewer: 'reviewer' },
+  };
+  const d = routeWith('fix the crash in the parser, add tests', { env: FULL_ENV, config: cfg });
+  assert.ok(d.reviewPass);
+  assert.equal(d.reviewPass.reviewer, null, 'openai_codex must not review openai work');
+});
+
+// RR-4: rewriting N2's fixture to dodge the new vendor rule lost its original
+// point, that identity is a PAIR and not a concatenation. Cover that directly
+// with a pair that collides under BOTH a delimiter-free join and a '/' join,
+// while the two providers remain genuinely different vendors.
+test('reviewer and tie-breaker survive a provider/model string collision', () => {
+  const cfg = {
+    lanes: {
+      primary: { provider: 'zeta', models: { light: 'z-1', standard: 'z-2', strong: 'z-3', frontier: 'z-4' } },
+      // Naive concatenation: 'a' + 'b/c' = 'ab/c'; 'ab' + '/c' = 'ab/c'. Same.
+      // A '/'-join also collides: 'a/b/c' vs 'ab//c' differ, so both joins are
+      // covered by the pair below staying distinct.
+      reviewer: { provider: 'acme', requiresEnv: [], models: { review: 'b/c' } },
+      'large-context': { provider: 'bravo', requiresEnv: [], models: { reasoning: 'c', fast: 'c' } },
+    },
+    review: { reviewer: 'reviewer', tieBreaker: 'large-context' },
+  };
+  const d = routeWith('code review the handler', { env: FULL_ENV, config: cfg });
+  assert.equal(d.reviewPass.reviewer.lane, 'reviewer');
+  assert.equal(d.reviewPass.tieBreaker.lane, 'large-context',
+    'a distinct model was suppressed by a string collision');
+});
+
+
+// ---------------------------------------------------------------------------
+// Third independent Codex pass. It confirmed three findings closed and caught
+// that the source-file signal I added to fix the second pass had created its
+// own false positives, plus two regex defects in it.
+// ---------------------------------------------------------------------------
+
+test('a prose file inside a source directory is not code work', () => {
+  // The directory matcher accepted ANY leaf, so src/README.md read as source.
+  assert.equal(route('fix the wording in src/README.md').reviewPass, null);
+  assert.equal(route('update the notes in lib/CHANGELOG.md').reviewPass, null);
+});
+
+test('a source extension mid-name does not make a prose file source', () => {
+  // The trailing \b matched the ".js" inside "retry.js.md".
+  assert.equal(route('fix the wording in docs/retry.js.md').reviewPass, null);
+});
+
+test('data, config and markup files alone are not code work', () => {
+  for (const s of [
+    'export billing records to invoices.json',
+    'fix the spelling in translations.yml',
+    'write the newsletter in email.html',
+  ]) assert.equal(route(s).reviewPass, null, 'spurious pass for: ' + s);
+});
+
+test('but a code signal makes a config file code work again', () => {
+  assert.ok(route('fix the schema in config.json').reviewPass,
+    '"schema" is an explicit code signal regardless of the extension');
+});
+
+test('a named source file does not attach a pass to a live-fact lookup', () => {
+  const d = route('write a report on current prices using prices.json');
+  assert.equal(d.lane, 'research');
+  assert.equal(d.reviewPass, null, 'a research-lane lookup is not code work');
+});
+
+test('a trivial edit in a real source file still needs no pass', () => {
+  // Naming a source file must NOT override the trivial guard: a typo fix in a
+  // .go file is noise. Real code evidence elsewhere in the task does override it.
+  assert.equal(route('fix the typo in production-deploy.go').reviewPass, null);
+  assert.ok(route('fix the typo in the auth token handling').reviewPass,
+    'security wording means the trivial word was incidental');
+});
+
+test('business money wording alone is never evidence of code', () => {
+  // strongCode must consult securityTECHNICAL, not the combined scope matcher:
+  // including business terms re-broke the bookkeeping cases.
+  assert.equal(route('create an invoice for the customer').reviewPass, null);
+  assert.equal(route('write a refund request').reviewPass, null);
+});
+
+// Codex demonstrated by mutation that neither the old N2 fixture nor my
+// replacement actually detected a '/'-joined identity, because the vendor guard
+// masks the original collision. Test the helpers directly instead.
+test('identity encodes provider and model as a PAIR, not a joined string', () => {
+  // Every pair below collides under SOME naive join but must stay distinct.
+  const pairs = [
+    [{ provider: 'a', model: 'b/c' }, { provider: 'ab', model: '/c' }],  // ''-join
+    [{ provider: 'a', model: 'b/c' }, { provider: 'a/b', model: 'c' }],  // '/'-join
+    [{ provider: 'x-y', model: 'z' }, { provider: 'x', model: 'y-z' }],  // '-'-join
+  ];
+  for (const [p, q] of pairs) {
+    assert.notEqual(_identity(p), _identity(q),
+      `identity collapsed ${JSON.stringify(p)} and ${JSON.stringify(q)}`);
+  }
+});
+
+test('identity treats an identical pair as identical', () => {
+  assert.equal(_identity({ provider: 'a', model: 'b' }), _identity({ provider: 'a', model: 'b' }));
+});
+
+test('vendor reduces a provider label to its root', () => {
+  for (const [label, root] of [
+    ['openai', 'openai'],
+    ['openai-codex', 'openai'],
+    ['openai_codex', 'openai'],
+    ['openai/codex', 'openai'],
+    ['openai:codex', 'openai'],
+    ['OpenAI-Codex', 'openai'],
+    ['anthropic', 'anthropic'],
+  ]) assert.equal(_vendor(label), root, label);
+});
+
+test('vendor is documented as over-matching host-style labels', () => {
+  // Not a bug, a documented conservative fallback: the cost is a manual second
+  // pass, never a false claim of independence. See docs/CONFIGURATION.md.
+  assert.equal(_vendor('api.openai.com'), _vendor('api.anthropic.com'));
+});
+
+
+// ---------------------------------------------------------------------------
+// Fourth independent Codex pass, scoped as fresh eyes rather than
+// re-verification. It found the most serious defect of the four rounds: a
+// ROUTING regression, not just a review-pass question.
+// ---------------------------------------------------------------------------
+
+// P4-6, the routing regression. SOURCE_EXT gained extensions that stripFilenames
+// did not know about, so those filenames were no longer stripped and their words
+// leaked into lane and tier selection. "latest" inside "latest.jsx" read as a
+// live-fact signal and sent a bug fix to the research lane.
+test('a newly recognised source extension is still stripped before classification', () => {
+  const d = route('fix the bug in latest.jsx');
+  assert.equal(d.lane, 'primary', 'the word "latest" inside a filename must not reach the live-fact rule');
+  assert.ok(d.reviewPass);
+});
+
+test('filename words do not escalate the tier for any source extension', () => {
+  assert.equal(route('fix the bug in production.scala').tier, route('fix the bug in production.js').tier);
+  assert.equal(route('fix the bug in latest.vue').lane, 'primary');
+});
+
+test('stripFilenames removes every extension hasSourceFile recognises', () => {
+  for (const f of ['latest.jsx', 'production.scala', 'current.lua', 'today.vue', 'entire.svelte']) {
+    assert.ok(!stripFilenames(`fix the bug in ${f}`).includes(f), 'not stripped: ' + f);
+  }
+});
+
+// P4-4: ordinary edit verbs were missing from the mutation list entirely, so
+// removing a security bug required no review at all.
+test('ordinary edit verbs count as mutating code', () => {
+  for (const s of [
+    'remove the authentication bypass in src/login.js',
+    'update the retry logic in src/retry.js',
+    'delete the dead branch in src/parser.js',
+    'replace the timeout handling in src/fetch.js',
+    'revert the change in src/index.js',
+  ]) assert.ok(route(s).reviewPass, 'no pass for: ' + s);
+});
+
+// P4-3: a NEGATED trivial word cancelled a substantive change. The trivial guard
+// now only fires when the trivial word is the actual action.
+test('a negated trivial instruction does not cancel the requirement', () => {
+  assert.ok(route('fix the bug in src/retry.js; do not rename anything').reviewPass);
+  assert.ok(route('implement the parser; avoid reformatting').reviewPass);
+});
+
+test('but an un-negated trivial edit still suppresses it', () => {
+  assert.equal(route('fix the typo in production-deploy.go').reviewPass, null);
+  assert.equal(route('rename the heading in the team wiki note').reviewPass, null);
+});
+
+// P4-5: the content guard ran before source evidence, so ordinary software
+// vocabulary suppressed real implementation work.
+test('a named source file survives ordinary content vocabulary', () => {
+  assert.ok(route('fix the copy loop in src/copy.ts').reviewPass,
+    '"copy" is a content term but this is implementation work in a source file');
+});
+
+// P4-7: only the FIRST source-directory candidate was examined, so an excluded
+// prose path masked a valid source path after it.
+test('every source-directory candidate is examined, not just the first', () => {
+  assert.ok(route('fix the bug in src/README.md and lib/backoff').reviewPass);
+  assert.ok(route('update docs/notes.md then src/retry.js').reviewPass);
+});
+
+test('a prose path alone is still not source', () => {
+  assert.equal(route('fix the wording in src/README.md and docs/guide.md').reviewPass, null);
+});
+
+// Re-entrancy: the strip regex is module-level with /g, so a stale lastIndex
+// would make results depend on call order.
+test('repeated calls are stable, no lastIndex carryover', () => {
+  const t = 'fix the bug in latest.jsx';
+  const first = stripFilenames(t);
+  for (let i = 0; i < 5; i++) assert.equal(stripFilenames(t), first);
+  const a = route(t).lane;
+  route('fix the bug in other.scala');
+  assert.equal(route(t).lane, a);
 });

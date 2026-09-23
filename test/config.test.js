@@ -213,7 +213,7 @@ test('taskText "omit" keeps task text out of the log entirely', () => {
 test('the log records who reviews and who arbitrates', () => {
   const t = 'code review the scheduler changes';
   const entry = makeLogEntry(t, route(t, { env: FULL_ENV }));
-  assert.deepEqual(entry.reviewPass, { reviewer: 'reviewer', tieBreaker: 'large-context', skipped: [] });
+  assert.deepEqual(entry.reviewPass, { scope: 'correctness', reviewer: 'reviewer', tieBreaker: 'large-context', skipped: [] });
 });
 
 // --- CLI -------------------------------------------------------------------------------
@@ -229,7 +229,7 @@ test('the CLI routes with no config and no keys', () => {
 test('the CLI prints the review pass for a review task', () => {
   const r = cli(['code review the scheduler changes']);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /review pass: openai-codex/);
+  assert.match(r.stdout, /review pass \((?:correctness|security)\): openai-codex/);
 });
 
 test('the CLI --json output parses and --log writes to the configured path', () => {

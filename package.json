@@ -1,6 +1,6 @@
 {
   "name": "model-caddie",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The right model for every task: deterministic, auditable model routing for AI coding agents, with a built-in independent review pass. No model call to pick a model.",
   "type": "module",
   "bin": {
@@ -20,7 +20,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test test/routing.test.js test/config.test.js test/hardening.test.js"
+    "test": "node --test test/routing.test.js test/config.test.js test/hardening.test.js test/properties.test.js test/risk-paths.test.js",
+    "eval": "node eval/evaluate.js",
+    "eval:gate": "node eval/evaluate.js --gate",
+    "eval:holdout": "node eval/evaluate.js --corpus=holdout.json"
   },
   "engines": {
     "node": ">=20"

@@ -19,7 +19,38 @@ Most "smart routing" schemes call a model to decide which model to call, which a
 
 **Capability lanes, not just a cheap-to-expensive ladder.** Most routers only escalate up a single ladder from a small model to a large one. This router also recognizes that some tasks need a different *kind* of capability, not just a bigger model. A question about a live fact (today's rate, the current price of something) goes to a research lane that can actually look it up, because no model's training data has today's number in it. A task that hands over an entire repository or a long document goes to a large-context lane sized for that kind of input. The primary ladder (light, standard, strong, frontier) still handles everything else.
 
-**A built-in independent review pass.** When a task reads as a code, security, or spec review, the router does not just pick a stronger model and call it done. It attaches a requirement that a second, different model review the same work independently, plus a tie-breaker lane to arbitrate any point where the two disagree. This requirement cannot silently vanish: if the configured reviewer is unavailable, the router falls back to a configured fallback lane; if every review lane is unavailable, it says so explicitly and tells you to run the second pass by hand. It never quietly returns a decision with no review pass on a review task.
+**A built-in independent review pass.** It fires on two things, not one: when a task *asks* for a code, security, or spec review, and when a task *changes code* even though its text never says "review". That second trigger matters, because a bug fix or a new script produces exactly the code an outside pass exists for, and keying only on the word "review" left the requirement resting on whoever remembered it. The pass also carries a **scope**, `security` or `correctness`, because a correctness-scoped prompt reliably misses credential leakage, fail-open authorization and injection.
+
+**How well does it actually decide?** Measured, not asserted, and the honest
+answer is "usefully, not reliably".
+
+On an externally authored 80-case challenge set that was not used for tuning, the
+router detected **22 of 40** review-required tasks, 55% recall, and missed 18. Of
+32 review requests it made, 22 were warranted, 69% precision. End to end, counting
+both the request and the correct security-or-correctness scope, **16 of 40, 40%**.
+A nominal 95% Wilson interval on that recall runs about 40% to 69%. These figures
+describe this challenge set, not a representative production sample.
+
+On the maintainer's own tuned corpus it scores 100%. The gap between those two
+numbers is the most useful fact in this README.
+
+Three separate blind sets each landed near 60 to 70% precision on first contact,
+rose above 90% once they had been used to fix things, and were then replaced by a
+fresh set that landed back near 60 to 70%. That is overfitting measured from the
+outside. Treat the review pass as **a useful prompt, not a guarantee**: if a change
+matters, require the outside review yourself rather than waiting to be told.
+
+On the cleanest set the errors lean toward **missing** reviews (18) more than
+over-requesting them (10), which is the direction that costs you something.
+[docs/KNOWN-LIMITATIONS.md](docs/KNOWN-LIMITATIONS.md) lists every failure class
+with a worked example, including what it misses (symptom-only bug reports,
+commit-style one-liners, change requests phrased as questions, infrastructure as
+code) and what it over-requests. Reproduce any of it with `npm run eval` and
+`node eval/evaluate.js --corpus=holdout3.json`.
+
+**Independent means a different provider, not just a different model.** Two models from one vendor share training data, tooling and blind spots, so the router refuses a reviewer lane on the same provider as the lane doing the work, and asks for a manual second pass rather than reporting an independence it did not actually get.
+
+When a task reads as code work, the router does not just pick a stronger model and call it done. It attaches a requirement that a second, different model review the same work independently, plus a tie-breaker lane to arbitrate any point where the two disagree. This requirement cannot silently vanish: if the configured reviewer is unavailable, the router falls back to a configured fallback lane; if every review lane is unavailable, it says so explicitly and tells you to run the second pass by hand. It never quietly returns a decision with no review pass on a review task.
 
 **An append-only decision log with negation-aware overrides.** Every routed decision can be appended as one JSON line to a log file, naming the exact rule that fired (for example `R3-live-web` or `R3b-review-primary`) so routing behavior can be audited later. The override grammar understands rejection, not just requests: "don't use gemini" bars the large-context lane for every later rule in that same task, even a rule several steps down the ladder that would otherwise have reached for it.
 
@@ -42,9 +73,22 @@ $ node bin/model-caddie.js "code review the scheduler changes"
 config: profile:anthropic
 route: primary / strong -> claude-opus-5-5 (R3b-review-primary, E2-architecture-review)
 dispatch: anthropic claude-opus-5-5, in Claude Code use the Agent tool with the matching model override
-review pass: openai-codex / codex-cli-default; tie-break: google / gemini-3.1-pro-preview
+review pass (correctness): openai-codex / codex-cli-default; tie-break: google / gemini-3.1-pro-preview
 notes:
   - independent review pass required: openai-codex (reviewer lane) reviews the primary lane's work; where the two disagree, google (large-context lane) arbitrates that finding
+```
+
+A task that changes code requires the pass too, without ever using the word "review", and a task touching credentials draws the security scope:
+
+```
+$ node bin/model-caddie.js "add a backfill that authenticates with the service-role key and patches rows"
+config: profile:anthropic
+route: primary / standard -> claude-sonnet-5 (R5-primary-ladder, E0-default)
+dispatch: anthropic claude-sonnet-5, in Claude Code use the Agent tool with the matching model override
+review pass (security): openai-codex / codex-cli-default; tie-break: google / gemini-3.1-pro-preview
+notes:
+  - scope the reviewer's prompt as a SECURITY review, not correctness: credential leakage paths, trust boundaries on external input, authorization defaults and whether a missing policy fails open, blast radius, third-party trust chain
+  - review pass required because the task CHANGES code, not because it asked for a review
 ```
 
 ```

@@ -14,9 +14,12 @@
 //   R5  everything else    primary lane, cheapest tier that fits
 
 import { compileConfig, loadProfile, DEFAULT_PROFILE, PRIMARY_TIERS } from './config.js';
-import { stripFilenames } from './strip.js';
+import { stripFilenames, hasSourceFile, riskSurface, riskSurfaceIsSecurity } from './strip.js';
 
 export { stripFilenames };
+// Exported for tests: the pair-vs-concatenation encoding and the vendor root are
+// both load-bearing for the independence guard and need direct coverage.
+export { identity as _identity, vendor as _vendor };
 
 // Cheapest-capable order. Escalate one rung only when a named criterion fires.
 export const TIERS = PRIMARY_TIERS;
@@ -53,17 +56,40 @@ const RX = {
   deep: /\bresearch\b|\bmulti[- ]?source\b|\bdeep\b|\bcomprehensive\b/i,
   large: /\b(?:full|entire|whole)\s+(?:repo|repository|codebase|project|vault|workspace|monorepo)\b|\blong\s+(?:document|doc|report|pdf|contract|transcript)\b|\blarge\s+(?:file|csv|dataset)\b/i,
   reasoningHeavy: /\bevaluate\b|\btrade[- ]?offs?\b|\breason(?:ing)?\b|\barchitecture\b/i,
-  reviewPass: /\b(?:code|security|spec|design|diff|pr|patch|build[- ]spec) review\b|\breview (?:this|the|my|these) (?:code|diff|pr|patch|implementation|spec|changes?)\b|\breview (?:the |our |my )?(?:security|correctness|error handling|auth(?:entication|orization)?)\b/i,
+  // The review-request forms. The middle branch used to demand the noun sit
+  // IMMEDIATELY after the determiner, so "review the proposed cache eviction
+  // spec" matched nothing; a blind holdout set showed 5 missed review requests
+  // in one slice from that rigidity. A bounded word window fixes it without
+  // becoming an open match. The last branch covers asking a human in plain
+  // words ("give it a second pair of eyes", "take a look at").
+  reviewPass: /\b(?:code|security|spec|design|diff|pr|patch|build[- ]spec) review\b|\b(?:review|scrutini[sz]e|audit|critique|sanity[- ]check|double[- ]check)\s+(?:(?:this|the|my|these|our|that|proposed|draft|new|existing)\s+)?(?:[\w-]+\s+){0,4}(?:code|diff|pr|patch|implementation|spec|specification|design|changes?|model|logic|rules?|schema|endpoint|handler|module)\b|\breview (?:the |our |my )?(?:security|correctness|error handling|auth(?:entication|orization)?)\b|\b(?:second pair of eyes|another pair of eyes|take a look at the (?:code|diff|design|spec))\b/i,
   // An explicit code signal outranks the content guard: plenty of software is
   // named after the business it serves (a listing generator, a contract parser),
   // and dropping a real code review is the dangerous direction.
-  codeSignal: /\b(?:code|codebase|implementation|patch|diff|endpoint|api|script|generator|parser|handler|service|component|module|function|schema|migration|repo|repository|app|build[- ]spec|regex|classifier|pipeline)\b/i,
+  codeSignal: /\b(?:code|codebase|implementation|patch|diff|endpoint|api|script|generator|parser|handler|service|component|module|function|schema|migration|repo|repository|app|build[- ]spec|regex|classifier|pipeline|renderer|fetcher|adapter|worker|runner|loader|importer|exporter|scheduler|queue|calculator|validator|serializer|middleware|wrapper|driver|daemon|resolver|tool|helper|util|utils|hook|callback|listener|reducer|selector)\b/i,
   e5Frontier: /\badversarial(?:ly)?\b|\bnovel architecture\b|\bmulti[- ]?agent\b|\bfrontier\b/i,
   e1MultiFile: /\bacross (?:the|our|your|multiple|all|every|any)?\s*(?:codebase|repo|repos|files|project)\b|\bmulti[- ]?file\b|\bcodebase[- ]?wide\b/i,
   e2ArchReview: /\barchitect(?:ure|ing|ural)?\b|\b(?:design|code|security|spec) review\b|\bsystem design\b/i,
   e3Ambiguity: /\bambiguous\b|\bopen[- ]?ended\b|\bunclear requirements\b/i,
   e4BlastRadius: /\bproduction\b|\bmigration\b|\birreversible\b|\bforce[- ]?push\b|\bdeploy\b/i,
   trivial: /\btypo\b|\brename\b|\breformat\b|\blook(?:ing)? ?up\b|\bone[- ]?liner\b|\bfix the date\b/i,
+  // Verbs that CHANGE code. reviewPass above keys on the literal word "review",
+  // so a task that PRODUCES code needing an outside pass used to require nothing
+  // and the requirement depended on the operator remembering it.
+  codeMutating: /\b(?:fix(?:ing|es)?|implement(?:ing|s)?|refactor(?:ing|s)?|harden(?:ing|s)?|patch(?:ing|es)?|rewrite|rewriting|migrat(?:e|ing|ion)|build(?:ing)?|add(?:ing)?|wire (?:it |this )?up|instrument|port(?:ing)?|upgrade|bump|write|writing|create|generate|export|pars(?:e|ing)|validat(?:e|ing|ion)|saniti[sz]\w*|escap(?:e|es|ing|ed)|remov(?:e|es|ing)|delet(?:e|es|ing)|updat(?:e|es|ing)|chang(?:e|es|ing)|replac(?:e|es|ing)|revert(?:ing|s)?|disabl(?:e|es|ing)|enabl(?:e|es|ing)|extract(?:ing|s)?|rotat(?:e|es|ing)|stor(?:e|es|ing)|configur(?:e|es|ing|ation)|encrypt(?:ing|s)?|decrypt(?:ing|s)?|hash(?:ing|es)?|mak(?:e|es|ing)|turn|stop|prevent|ensur(?:e|es|ing)|teach|hav(?:e|ing)|swap|guard|handl(?:e|es|ing)|support|allow|reject|cach(?:e|es|ing)|retry|throttl(?:e|es|ing)|log|emit|expos(?:e|es|ing)|hid(?:e|es|ing)|split|merg(?:e|es|ing)|tighten|loosen|bound|cap|clamp|round|normalis(?:e|es|ing)|normaliz(?:e|es|ing)|serialis(?:e|es|ing)|serializ(?:e|es|ing)|propagat(?:e|es|ing)|cancel|debounce|paginat(?:e|es|ing)|instrument(?:ing|s)?|keep|sort(?:ing|s)?|identify)\b/i,
+  // Code-work signals that SURVIVE filename stripping, which removes the path
+  // and extension that would otherwise mark a task as code work. "fix the crash
+  // in src/retry.js, TDD then verify" arrives here as "fix the crash in , TDD
+  // then verify", so these are what carry it.
+  // Deliberately NOT bare "test", "suite", "bug", "helper" or "timeout": those
+  // fired on ordinary non-code work ("build a science test for students").
+  codeWork: /\b(?:tdd|test[- ]first|unit tests?|test suite|regression tests?|add tests|failing test|crash(?:es|ed|ing)?|traceback|stack ?trace|exception|segfault|null pointer|lint|compile|refactor(?:ing|s)?|regex|classifier|race condition|deadlock|off[- ]by[- ]one|assertion)\b/i,
+  // Split deliberately. BOTH set scope to security, but only the TECHNICAL half
+  // is evidence that a task is code at all. Treating the business half as a code
+  // signal made "create an invoice for the customer" demand a security code
+  // review (Codex review, 0.2.0).
+  securityTechnical: /\b(?:secret|secrets|credential|credentials|api[- ]?key|service[- ]?role|token|password|oauth|auth(?:entication|orization)?|authn|authz|login|sign[- ]?in|permission|rls|row[- ]level|pii|personal data|webhook|(?:user|customer|visitor|client)[- ]?(?:supplied|input|provided|controlled|uploads?)|uploaded|upload|visitor|attacker|untrusted|saniti[sz]\w*|inject(?:ion|ed|ing|s)?|private network|internet[- ]facing|email addresses?|home addresses?|patient|medical record|personal (?:data|information)|ssn|social security|signed[- ]?(?:in|out)|session|role|transfer amount|payout|ssrf|publicly reachable|public endpoint|security|vulnerab(?:le|ility|ilities))\b/i,
+  securityBusiness: /\b(?:payment|charge|charges|invoice|refund|money|billing)\b/i,
 };
 
 // The override grammar, built per config because the lane and tier NAMES are
@@ -183,6 +209,95 @@ function isCodeReview(s, c) {
   return RX.codeSignal.test(s) || !c.contentRx.test(s);
 }
 
+// A task that CHANGES code produces something needing the outside pass, even
+// though its text never says "review". Kept separate from isCodeReview, which
+// also feeds the tier ladder: requiring the pass more often must not silently
+// buy a more expensive model.
+// Does the task explicitly say it changes NOTHING?
+//
+// A mutation verb appearing anywhere used to be read as a mutation, so
+// "summarize this patch", "report the status without changing anything" and
+// "run the tests, do not edit anything" all demanded a code review. A blind
+// holdout set showed this was 3 of 7 false positives, the largest single cause.
+//
+// Deliberately narrow: only an EXPLICIT no-change statement, or a read-only
+// framing verb leading the task, counts. A vague task still requires the pass,
+// because the safe direction is a redundant review rather than a missed one.
+const READ_ONLY_RX = new RegExp([
+  String.raw`\b(?:do\s+not|don['’]?t|without)\s+(?:\w+\s+){0,2}(?:chang(?:e|ing)|edit(?:ing)?|modify(?:ing)?|touch(?:ing)?|writ(?:e|ing)|add(?:ing)?)\b`,
+  String.raw`\bno\s+(?:edits?|changes?|code changes?|file changes?)\b`,
+  String.raw`\bread[- ]only\b`,
+].join('|'), 'i');
+
+// A read-only FRAMING verb leading the task ("summarise this", "explain that").
+// Kept separate from the explicit no-change statements above because it is far
+// weaker evidence: "Summarize the migration notes, THEN change the adapter" is a
+// change request wearing a read-only opening, and treating the lead verb as
+// decisive turned a real change into a missed review.
+const READ_ONLY_LEAD_RX = /^(?:please\s+)?(?:summari[sz]e|condense|explain|describe|document|report on|tell me|walk me through|list)\b/i;
+
+// A change clause after the first clause boundary cancels the read-only lead.
+const LATER_CHANGE_RX = /[,;.]\s*(?:and\s+|then\s+|after\s+that\s+)*(?:chang|implement|fix|add|updat|remov|replac|rewrit|refactor|patch|port|delet|swap|teach|mak)\w*\b/i;
+
+function isReadOnly(s) {
+  if (READ_ONLY_RX.test(s)) return true;
+  return READ_ONLY_LEAD_RX.test(s) && !LATER_CHANGE_RX.test(s);
+}
+
+// Is a trivial-edit word actually the ACTION, or is it negated?
+//
+// "fix the typo" is a trivial task. "fix the bug in src/retry.js; do not rename
+// anything" is substantive work that merely mentions a trivial verb in order to
+// forbid it, and reading that as trivial cancelled the review requirement for
+// real work. Only an un-negated occurrence suppresses the pass.
+const TRIVIAL_NEG_RX = new RegExp(String.raw`(?:${NEG})\s+(?:\w+\s+){0,3}$`, 'i');
+
+function trivialIsTheAction(s) {
+  const rx = new RegExp(RX.trivial.source, 'gi');
+  for (const m of s.matchAll(rx)) {
+    if (!TRIVIAL_NEG_RX.test(s.slice(0, m.index))) return true;
+  }
+  return false;
+}
+
+// `namedSource` comes from hasSourceFile() on the RAW text, because stripping
+// destroys the path and extension that prove a task is code work.
+function isCodeMutating(s, c, namedSource) {
+  // Real tickets are frequently noun phrases with no imperative verb at all:
+  // "An undo stack for the pixel editor, capped at twenty operations",
+  // "src/algo/path.cpp: memoization, bounded to 256 entries". Requiring a verb
+  // made every one of those require no review, which a clean holdout set showed
+  // was the single largest cause of MISSED reviews, the dangerous direction.
+  // A named source file is treated as the request itself.
+  if (!RX.codeMutating.test(s) && !namedSource) return false;
+  // An explicit no-change statement means this is not a mutation, whatever
+  // verbs the description contains.
+  if (isReadOnly(s)) return false;
+  // Content work wins over ordinary software vocabulary, but NOT over a named
+  // source file. "write the newsletter in email.html" is copy, and html is not a
+  // source extension so namedSource is false there. "fix the copy loop in
+  // src/copy.ts" is implementation work that happens to use the word "copy", and
+  // suppressing it on that word alone was wrong.
+  if (c.contentRx.test(s) && !RX.codeSignal.test(s) && !namedSource) return false;
+  // Evidence strong enough to say the task is real code work on its own terms,
+  // independent of which file it names.
+  // securityTECHNICAL, not isSecurityScoped: business money words are not
+  // evidence of code, and including them re-broke "create an invoice for the
+  // customer".
+  const strongCode = RX.codeSignal.test(s) || RX.codeWork.test(s) || RX.securityTechnical.test(s);
+  // A trivial mechanical edit needs no outside pass, and naming a source file is
+  // NOT enough to override that: a typo fix in a .go file is noise, not review
+  // material. But when the task also carries real code evidence the trivial word
+  // is incidental, not the action ("fix the parser AND rename the helper"), so it
+  // must not cancel the requirement. Checked before the final return, because
+  // placing it after an early !isCode return made it dead code.
+  if (trivialIsTheAction(s) && !strongCode) return false;
+  // Security vocabulary sets the SCOPE. It does not establish that a task is
+  // code at all, and letting it do so made "create an invoice for the customer"
+  // demand a security code review. A named source file does establish it.
+  return Boolean(namedSource) || strongCode;
+}
+
 // The review pass: a review needs one model to do the work AND a different
 // model to check it. The reviewer is chosen from the config, skipping any lane
 // the task declined, the environment cannot reach, or that resolves to a model
@@ -190,9 +305,18 @@ function isCodeReview(s, c) {
 // tie-breaker). The requirement itself never disappears; with no reviewer left
 // it says so and asks for a manual second pass.
 const REVIEW_TIER = { reviewer: 'review', 'large-context': 'reasoning', research: 'deep' };
-const identity = (x) => JSON.stringify([x.provider, x.model]);
+// Either half means the review must be scoped as a security review.
+const isSecurityScoped = (s) => RX.securityTechnical.test(s) || RX.securityBusiness.test(s);
 
-function reviewPassFor(s, ctx, exec) {
+const identity = (x) => JSON.stringify([x.provider, x.model]);
+// Provider labels are free-form, so "openai" and "openai-codex" are the same
+// vendor wearing two names and must not review each other. Compare the vendor
+// root: lowercased, up to the first separator. Biased toward declaring a clash,
+// because a false clash only asks for a manual second pass while a missed one
+// reports an independence that does not exist.
+const vendor = (p) => String(p || '').toLowerCase().split(/[-_/:.\s]/)[0];
+
+function reviewPassFor(s, ctx, exec, forcedSecurity) {
   const { c, env, ov, notes } = ctx;
   const rc = c.config.review;
   if (!rc.enabled) return null;
@@ -200,6 +324,14 @@ function reviewPassFor(s, ctx, exec) {
   const skipped = [];
   const skip = (lane, reason) => { if (!skipped.some((x) => x.lane === lane)) skipped.push({ lane, reason }); };
   const taken = new Set(exec.provider && exec.model ? [identity(exec)] : []);
+  // Provider-level, not just model-level. Two different models from ONE vendor
+  // share training data, tooling and blind spots, so they are not an independent
+  // review however different their weights are. The identity check below only
+  // compared [provider, model], so a second lane on the same provider passed it
+  // and the run reported an "independent review pass" that was nothing of the
+  // kind. Refusing it is the safe direction: the requirement stays, and the run
+  // asks for a manual second pass instead of claiming one it did not get.
+  const providers = new Set(exec.provider ? [vendor(exec.provider)] : []);
   const working = exec.lane === 'consensus' ? exec.legs : [exec.lane];
   const candidate = (laneId) => {
     if (!laneId || !c.config.lanes[laneId]) return null;
@@ -209,6 +341,7 @@ function reviewPassFor(s, ctx, exec) {
     if (!st.available) { skip(laneId, st.reason); return null; }
     const pick = describe(c, laneId, REVIEW_TIER[laneId]);
     if (taken.has(identity(pick))) { skip(laneId, `same model (${pick.provider} ${pick.model}) as one already in this review`); return null; }
+    if (providers.has(vendor(pick.provider))) { skip(laneId, `same provider (${vendor(pick.provider)}, as ${pick.provider}) as one already in this review, so it is not an independent pass`); return null; }
     return pick;
   };
 
@@ -218,7 +351,7 @@ function reviewPassFor(s, ctx, exec) {
     reviewer = candidate(rc.fallback);
     usedFallback = Boolean(reviewer);
   }
-  if (reviewer) taken.add(identity(reviewer));
+  if (reviewer) { taken.add(identity(reviewer)); providers.add(vendor(reviewer.provider)); }
   const tieBreaker = rc.tieBreaker && (!reviewer || rc.tieBreaker !== reviewer.lane) ? candidate(rc.tieBreaker) : null;
 
   const worker = exec.lane === 'consensus' ? 'the consensus' : `the ${exec.lane} lane's`;
@@ -231,6 +364,10 @@ function reviewPassFor(s, ctx, exec) {
 
   return {
     required: true,
+    // A named risk surface IS the security signal. Scoring the prose for
+    // security words would let a terse ticket ('package-lock.json, 40 bumps')
+    // come back as correctness, which defeats the point of forcing it.
+    scope: (forcedSecurity || isSecurityScoped(s)) ? 'security' : 'correctness',
     reviewer,
     tieBreaker,
     skipped,
@@ -364,6 +501,11 @@ export function route(taskText, opts = {}) {
   const notes = [];
   if (raw.length > MAX_INPUT) notes.push(`task text truncated to its first ${MAX_INPUT} characters for classification`);
   const s = stripFilenames(raw.slice(0, MAX_INPUT));
+  // Computed on the RAW text: stripping is about to delete this evidence.
+  const namedSource = hasSourceFile(raw.slice(0, MAX_INPUT));
+  // Also on RAW text: a path is a stronger and more stable signal than any
+  // wording around it, and stripping would delete it.
+  const risk = riskSurface(raw.slice(0, MAX_INPUT));
   if (c.sensitiveRx.test(raw.slice(0, MAX_INPUT))) notes.push('sensitive-data signal: this task reads like it may carry personal or client data. Advisory only, routing is unchanged; remove anything sensitive before an outside lane sees it');
 
   const ov = parseOverride(s, { config: opts.config });
@@ -384,10 +526,33 @@ export function route(taskText, opts = {}) {
       : 'this review also mentions live facts and no research lane is usable: any figure it relies on is unsourced and must be verified against its primary source');
   }
 
-  // The review pass is decided last so no earlier rule can drop it. A task that
-  // routed to the research lane only counts as a code review when it names code.
-  if (isCodeReview(s, c) && (d.lane !== 'research' || RX.codeSignal.test(s))) {
-    d.reviewPass = reviewPassFor(s, ctx, d);
+  // The review pass is decided last so no earlier rule can drop it.
+  //
+  // THREE triggers, in order of strength:
+  //   1. the task names a HIGH-RISK PATH  -> forced, scoring is bypassed entirely
+  //   2. the task ASKS for a review
+  //   3. the task CHANGES code
+  //
+  // Trigger 1 exists because the text classifier misses a large share of
+  // review-worthy work on a blind set, and a path survives paraphrase, terse
+  // tickets and complaints in a way prose does not. A migration, an auth module,
+  // a lockfile or a CI pipeline is a risk surface whatever the sentence around it
+  // says, so nothing in the scoring may talk it out of a review. The one thing
+  // that still exempts it is an explicit read-only statement, because reading a
+  // migration is not modifying one and forcing a review on every mention would
+  // train users to ignore the gate.
+  const forcedByPath = Boolean(risk) && !isReadOnly(s);
+  if (forcedByPath || ((isCodeReview(s, c) || isCodeMutating(s, c, namedSource)) && (d.lane !== 'research' || RX.codeSignal.test(s)))) {
+    d.reviewPass = reviewPassFor(s, ctx, d, forcedByPath && riskSurfaceIsSecurity(risk));
+    if (forcedByPath && d.reviewPass) {
+      ctx.notes.push(`FORCED by risk surface (${risk}): this task names a high-risk path, so the review pass is required regardless of how the request is worded and cannot be scored away`);
+    }
+    if (d.reviewPass && d.reviewPass.scope === 'security') {
+      ctx.notes.push('scope the reviewer\'s prompt as a SECURITY review, not correctness: credential leakage paths, trust boundaries on external input, authorization defaults and whether a missing policy fails open, blast radius, third-party trust chain');
+    }
+    if (d.reviewPass && !isCodeReview(s, c) && !forcedByPath) {
+      ctx.notes.push('review pass required because the task CHANGES code, not because it asked for a review');
+    }
   }
 
   // A declined primary TIER is a preference, not a data-exposure guardrail, so
