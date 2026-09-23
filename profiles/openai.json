@@ -1,0 +1,40 @@
+{
+  "name": "openai",
+  "_about": "OpenAI as the primary lane with Claude as the independent reviewer. VERIFY the OpenAI model IDs against platform.openai.com/docs/models before use: they were confirmed from a single docs fetch on 2026-09-22 and OpenAI renames models often.",
+  "lanes": {
+    "primary": {
+      "provider": "openai",
+      "models": {
+        "light": "gpt-6-luna",
+        "standard": "gpt-6-sol",
+        "strong": "gpt-6-astra",
+        "frontier": "gpt-6-astra"
+      }
+    },
+    "research": {
+      "provider": "perplexity",
+      "requiresEnv": ["PERPLEXITY_API_KEY"],
+      "models": { "quick": "sonar", "deep": "sonar-deep-research" }
+    },
+    "large-context": {
+      "provider": "google",
+      "requiresEnv": ["GEMINI_API_KEY"],
+      "models": { "fast": "gemini-3.8-flash", "reasoning": "gemini-3.1-pro-preview" }
+    },
+    "reviewer": {
+      "provider": "anthropic",
+      "requiresEnv": ["ANTHROPIC_API_KEY"],
+      "models": { "review": "claude-opus-5-5" }
+    }
+  },
+  "aliases": {
+    "gpt": "primary",
+    "luna": "primary:light",
+    "sol": "primary:standard",
+    "astra": "primary:strong",
+    "perplexity": "research",
+    "gemini": "large-context",
+    "claude": "reviewer"
+  },
+  "review": { "reviewer": "reviewer", "tieBreaker": "large-context", "fallback": "large-context" }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "claude-code-only",
+  "_about": "Everything on Claude, no other API keys needed. The review pass still fires on code and security reviews, but with no second provider it tells you to run that second pass by hand or with another model.",
+  "lanes": {
+    "primary": {
+      "provider": "anthropic",
+      "models": {
+        "light": "claude-haiku-4-5-20251001",
+        "standard": "claude-sonnet-5",
+        "strong": "claude-opus-5-5",
+        "frontier": "claude-fable-5-1"
+      },
+      "dispatch": "{provider} {model}, in Claude Code use the Agent tool with the matching model override"
+    }
+  },
+  "aliases": {
+    "claude": "primary",
+    "haiku": "primary:light",
+    "sonnet": "primary:standard",
+    "opus": "primary:strong",
+    "fable": "primary:frontier"
+  },
+  "review": { "reviewer": null, "tieBreaker": null, "fallback": null }
+}

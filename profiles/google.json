@@ -1,0 +1,33 @@
+{
+  "name": "google",
+  "_about": "Gemini as the primary lane (it doubles as the large-context lane), Claude as the independent reviewer. Model IDs checked against ai.google.dev/gemini-api/docs/models on 2026-09-22.",
+  "lanes": {
+    "primary": {
+      "provider": "google",
+      "models": {
+        "light": "gemini-3.5-flash-lite",
+        "standard": "gemini-3.8-flash",
+        "strong": "gemini-3.1-pro-preview",
+        "frontier": "gemini-3.1-pro-preview"
+      }
+    },
+    "research": {
+      "provider": "perplexity",
+      "requiresEnv": ["PERPLEXITY_API_KEY"],
+      "models": { "quick": "sonar", "deep": "sonar-deep-research" }
+    },
+    "reviewer": {
+      "provider": "anthropic",
+      "requiresEnv": ["ANTHROPIC_API_KEY"],
+      "models": { "review": "claude-opus-5-5" }
+    }
+  },
+  "aliases": {
+    "gemini": "primary",
+    "flash": "primary:standard",
+    "pro": "primary:strong",
+    "perplexity": "research",
+    "claude": "reviewer"
+  },
+  "review": { "reviewer": "reviewer", "tieBreaker": null, "fallback": null }
+}

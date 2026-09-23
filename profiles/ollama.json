@@ -1,0 +1,21 @@
+{
+  "name": "ollama",
+  "_about": "Fully local: every tier runs on Ollama, no keys and no data leaving the machine. Tags from ollama.com/library on 2026-09-22; pick sizes your hardware can run. With no second provider, reviews ask for a manual second pass.",
+  "lanes": {
+    "primary": {
+      "provider": "ollama",
+      "models": {
+        "light": "llama3.2:3b",
+        "standard": "qwen2.5:14b",
+        "strong": "qwen2.5:32b",
+        "frontier": "llama3.1:70b"
+      },
+      "dispatch": "ollama run {model}"
+    }
+  },
+  "aliases": {
+    "llama": "primary",
+    "qwen": "primary:standard"
+  },
+  "review": { "reviewer": null, "tieBreaker": null, "fallback": null }
+}

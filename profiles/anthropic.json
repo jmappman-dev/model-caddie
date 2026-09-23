@@ -1,0 +1,43 @@
+{
+  "name": "anthropic",
+  "_about": "Claude as the primary lane, Perplexity for live research, Gemini for very large inputs, the OpenAI Codex CLI as the independent reviewer. Model IDs checked against each provider's model docs on 2026-09-22; providers rename models often, so check them before relying on this.",
+  "lanes": {
+    "primary": {
+      "provider": "anthropic",
+      "models": {
+        "light": "claude-haiku-4-5-20251001",
+        "standard": "claude-sonnet-5",
+        "strong": "claude-opus-5-5",
+        "frontier": "claude-fable-5-1"
+      },
+      "dispatch": "{provider} {model}, in Claude Code use the Agent tool with the matching model override"
+    },
+    "research": {
+      "provider": "perplexity",
+      "requiresEnv": ["PERPLEXITY_API_KEY"],
+      "models": { "quick": "sonar", "deep": "sonar-deep-research" }
+    },
+    "large-context": {
+      "provider": "google",
+      "requiresEnv": ["GEMINI_API_KEY"],
+      "models": { "fast": "gemini-3.8-flash", "reasoning": "gemini-3.1-pro-preview" }
+    },
+    "reviewer": {
+      "provider": "openai-codex",
+      "requiresEnv": [],
+      "models": { "review": "codex-cli-default" },
+      "dispatch": "run the Codex CLI review on the same material, using whatever model your Codex login defaults to"
+    }
+  },
+  "aliases": {
+    "claude": "primary",
+    "haiku": "primary:light",
+    "sonnet": "primary:standard",
+    "opus": "primary:strong",
+    "fable": "primary:frontier",
+    "perplexity": "research",
+    "gemini": "large-context",
+    "codex": "reviewer"
+  },
+  "review": { "reviewer": "reviewer", "tieBreaker": "large-context", "fallback": "large-context" }
+}

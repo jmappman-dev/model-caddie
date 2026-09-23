@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.model-router/
+*.jsonl
+model-router.config.json
+.DS_Store
+Thumbs.db
